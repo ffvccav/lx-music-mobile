@@ -1,25 +1,20 @@
-import { memo } from 'react'
-import { ScrollView, TouchableOpacity, View } from 'react-native'
+import { memo, useState } from 'react'
+import { ScrollView, Pressable, View } from 'react-native' // 📺 引入 Pressable 代替 TouchableOpacity
 import { useNavActiveId, useStatusbarHeight } from '@/store/common/hook'
 import { useTheme } from '@/store/theme/hook'
 import { Icon } from '@/components/common/Icon'
 import { confirmDialog, createStyle, exitApp as backHome } from '@/utils/tools'
 import { NAV_MENUS } from '@/config/constant'
 import type { InitState } from '@/store/common/state'
-// import commonState from '@/store/common/state'
 import { exitApp, setNavActiveId } from '@/core/common'
 import { BorderWidths } from '@/theme'
 import { useSettingValue } from '@/store/setting/hook'
 
-const NAV_WIDTH = 68
+const NAV_WIDTH = 76 // 📺 电视端稍微加宽一点，视觉上更大气
 
 const styles = createStyle({
   container: {
     flexGrow: 0,
-    // flex: 1,
-    // alignItems: 'center',
-    // justifyContent: 'center',
-    // padding: 10,
     borderRightWidth: BorderWidths.normal,
     paddingBottom: 10,
     width: NAV_WIDTH,
@@ -31,35 +26,24 @@ const styles = createStyle({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  headerText: {
-    textAlign: 'center',
-    marginLeft: 16,
-  },
   menus: {
     flex: 1,
   },
   list: {
-    // paddingTop: 10,
     paddingBottom: 15,
   },
   menuItem: {
     flexDirection: 'row',
-    paddingTop: 15,
-    paddingBottom: 15,
-    // paddingLeft: 25,
-    // paddingRight: 25,
+    paddingTop: 18, // 📺 电视端加大间距，方便遥控器对准
+    paddingBottom: 18,
     justifyContent: 'center',
     alignItems: 'center',
-    // backgroundColor: 'rgba(0, 0, 0, 0.2)',
+    borderRadius: 8, // 📺 给焦点高亮边缘加点圆角
+    marginHorizontal: 6, // 📺 两边留白，高亮时更好看
+    marginBottom: 4,
   },
   iconContent: {
-    // width: 24,
-    // backgroundColor: 'rgba(0, 0, 0, 0.2)',
     alignItems: 'center',
-  },
-  text: {
-    paddingLeft: 15,
-    // fontWeight: '500',
   },
 })
 
@@ -69,8 +53,7 @@ const Header = () => {
   return (
     <View style={{ paddingTop: statusBarHeight }}>
       <View style={styles.header}>
-        <Icon name="logo" color={theme['c-primary-dark-100-alpha-300']} size={22} />
-        {/* <Text style={styles.headerText} size={16} color={theme['c-primary-dark-100-alpha-300']}>LX Music</Text> */}
+        <Icon name="logo" color={theme['c-primary-dark-100-alpha-300']} size={26} />
       </View>
     </View>
   )
@@ -83,28 +66,49 @@ const MenuItem = ({ id, icon, onPress }: {
   icon: string
   onPress: (id: IdType) => void
 }) => {
-  // const t = useI18n()
   const activeId = useNavActiveId()
   const theme = useTheme()
+  
+  // 📺 电视端核心：增加组件内部状态监听遥控器光标
+  const [isFocused, setIsFocused] = useState(false)
+  const isActive = activeId === id
 
-  return activeId == id
-    ? <View style={styles.menuItem}>
-        <View style={styles.iconContent}>
-          <Icon name={icon} size={20} color={theme['c-primary-font-active']} />
-        </View>
-        {/* <Text style={styles.text} size={14} color={theme['c-primary-font']}>{t(id)}</Text> */}
+  // 📺 动态计算电视遥控器在不同状态下的背景颜色
+  const getBackgroundColor = () => {
+    if (isFocused) return theme['c-primary-background-hover'] || 'rgba(0, 0, 0, 0.08)' // 遥控器光标在上面
+    if (isActive) return theme['c-primary-background-active'] || 'rgba(0, 0, 0, 0.04)' // 被选中激活状态
+    return 'transparent' // 普通状态
+  }
+
+  // 📺 动态计算图标颜色
+  const getIconColor = () => {
+    if (isActive || isFocused) return theme['c-primary-font-active'] || theme['c-primary']
+    return theme['c-font-label']
+  }
+
+  return (
+    <Pressable
+      focusable={true} // 📺 必须：允许遥控器获取焦点
+      onFocus={() => setIsFocused(true)} // 📺 遥控器移上来
+      onBlur={() => setIsFocused(false)}  // 📺 遥控器移走
+      onPress={() => onPress(id)} // 📺 遥控器按确认键
+      style={({ pressed }) => [
+        styles.menuItem,
+        { 
+          backgroundColor: getBackgroundColor(),
+          opacity: pressed ? 0.7 : 1 // 电视按下瞬间给个微弱的反馈
+        }
+      ]}
+    >
+      <View style={styles.iconContent}>
+        <Icon name={icon} size={24} color={getIconColor()} />
       </View>
-    : <TouchableOpacity style={styles.menuItem} onPress={() => { onPress(id) }}>
-        <View style={styles.iconContent}>
-          <Icon name={icon} size={20} color={theme['c-font-label']} />
-        </View>
-        {/* <Text style={styles.text} size={14}>{t(id)}</Text> */}
-      </TouchableOpacity>
+    </Pressable>
+  )
 }
 
 export default memo(() => {
   const theme = useTheme()
-  // console.log('render drawer nav')
   const showBackBtn = useSettingValue('common.showBackBtn')
   const showExitBtn = useSettingValue('common.showExitBtn')
 
@@ -131,7 +135,7 @@ export default memo(() => {
   return (
     <View style={{ ...styles.container, borderRightColor: theme['c-border-background'] }}>
       <Header />
-      <ScrollView style={styles.menus}>
+      <ScrollView style={styles.menus} removeClippedSubviews={false}>
         <View style={styles.list}>
           {NAV_MENUS.map(menu => <MenuItem key={menu.id} id={menu.id} icon={menu.icon} onPress={handlePress} />)}
         </View>
@@ -145,4 +149,3 @@ export default memo(() => {
     </View>
   )
 })
-
