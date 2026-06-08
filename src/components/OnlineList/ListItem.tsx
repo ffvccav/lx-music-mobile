@@ -1,6 +1,5 @@
-import { memo, useRef } from 'react'
-import { View, TouchableOpacity } from 'react-native'
-// import Button from '@/components/common/Button'
+import { memo, useRef, useState } from 'react' // 📺 引入 useState 监听遥控器指引
+import { View, Pressable } from 'react-native' // 📺 用 Pressable 降伏遥控器焦点
 import Text from '@/components/common/Text'
 import Badge, { type BadgeType } from '@/components/common/Badge'
 import { Icon } from '@/components/common/Icon'
@@ -25,7 +24,6 @@ const useQualityTag = (musicInfo: LX.Music.MusicInfoOnline) => {
     info.type = 'tertiary'
     info.text = t('quality_high_quality')
   }
-
   return info
 }
 
@@ -42,43 +40,99 @@ export default memo(({ item, index, showSource, onPress, onLongPress, onShowMenu
   isShowInterval: boolean
 }) => {
   const theme = useTheme()
-
   const isSelected = selectedList.includes(item)
 
-  const moreButtonRef = useRef<TouchableOpacity>(null)
+  // 📺 电视端核心状态：判断当前单首歌曲是否被遥控器光标框选
+  const [isTvFocused, setIsTvFocused] = useState(false)
+
+  // 电视端将整行作为量测锚点，长按时在右侧弹出菜单
+  const rowRef = useRef<View>(null)
+
   const handleShowMenu = () => {
-    if (moreButtonRef.current?.measure) {
-      moreButtonRef.current.measure((fx, fy, width, height, px, py) => {
-        // console.log(fx, fy, width, height, px, py)
-        onShowMenu(item, index, { x: Math.ceil(px), y: Math.ceil(py), w: Math.ceil(width), h: Math.ceil(height) })
+    if (rowRef.current?.measure) {
+      rowRef.current.measure((fx, fy, width, height, px, py) => {
+        // 在这一行的偏右侧安全区域弹出菜单
+        onShowMenu(item, index, { 
+          x: Math.ceil(px + width - 100), 
+          y: Math.ceil(py), 
+          w: 80, 
+          h: Math.ceil(height) 
+        })
       })
     }
   }
-  const tagInfo = useQualityTag(item)
 
+  const tagInfo = useQualityTag(item)
   const singer = `${item.singer}${isShowAlbumName && item.meta.albumName ? ` · ${item.meta.albumName}` : ''}`
 
   return (
-    <View style={{ ...styles.listItem, width: rowInfo.rowWidth, height: ITEM_HEIGHT, backgroundColor: isSelected ? theme['c-primary-background-hover'] : 'rgba(0,0,0,0)' }}>
-      <TouchableOpacity style={styles.listItemLeft} onPress={() => { onPress(item, index) }} onLongPress={() => { onLongPress(item, index) }}>
-        <Text style={styles.sn} size={13} color={theme['c-300']}>{index + 1}</Text>
+    <View 
+      ref={rowRef}
+      style={{ 
+        ...styles.listItem, 
+        width: rowInfo.rowWidth, 
+        height: ITEM_HEIGHT, 
+        // 📺 电视端视觉合并：不管是手机选中的高亮，还是电视遥控器指着的高亮，都赋予极强的高亮反馈
+        backgroundColor: isTvFocused 
+          ? 'rgba(255, 124, 0, 0.18)' // 遥控器指着时的亮橙色呼吸底色
+          : isSelected 
+            ? theme['c-primary-background-hover'] 
+            : 'transparent'
+      }}
+    >
+      {/* 📺 将整行升级为唯一的、可接收遥控器焦点的 Pressable */}
+      <Pressable
+        focusable={true}
+        onFocus={() => setIsTvFocused(true)}
+        onBlur={() => setIsTvFocused(false)}
+        onPress={() => onPress(item, index)} // 📺 遥控器点确认键直接切歌
+        onLongPress={handleShowMenu}        // 📺 遥控器长按确认键直接呼出更多菜单！免去移动到右边小按钮的麻烦
+        style={styles.listItemLeft}
+      >
+        {/* 序号：被指着时稍微变亮 */}
+        <Text 
+          style={styles.sn} 
+          size={13} 
+          color={isTvFocused ? theme['c-primary'] : theme['c-300']}
+        >
+          {index + 1}
+        </Text>
+
         <View style={styles.itemInfo}>
-          <Text numberOfLines={1}>{item.name}</Text>
+          {/* 歌名 */}
+          <Text 
+            numberOfLines={1}
+            color={isTvFocused ? (theme['c-primary-font-active'] || theme['c-primary']) : theme['c-font']}
+            style={{ fontWeight: isTvFocused ? 'bold' : 'normal' }}
+          >
+            {item.name}
+          </Text>
+          
           <View style={styles.listItemSingle}>
             { tagInfo.type ? <Badge type={tagInfo.type}>{tagInfo.text}</Badge> : null }
             { showSource ? <Badge type="tertiary">{item.source}</Badge> : null }
-            <Text style={styles.listItemSingleText} size={11} color={theme['c-500']} numberOfLines={1}>{singer}</Text>
+            <Text style={styles.listItemSingleText} size={11} color={isTvFocused ? theme['c-400'] : theme['c-500']} numberOfLines={1}>{singer}</Text>
           </View>
         </View>
+
+        {/* 歌曲时长 */}
         {
           isShowInterval ? (
-            <Text size={12} color={theme['c-250']} numberOfLines={1}>{item.interval}</Text>
+            <Text size={12} color={isTvFocused ? theme['c-400'] : theme['c-250']} numberOfLines={1} style={{ marginRight: 10 }}>
+              {item.interval}
+            </Text>
           ) : null
         }
-      </TouchableOpacity>
-     <TouchableOpacity onPress={handleShowMenu} ref={moreButtonRef} style={styles.moreButton}>
-        <Icon name="dots-vertical" style={{ color: theme['c-350'] }} size={12} />
-      </TouchableOpacity>
+      </Pressable>
+
+      {/* 📺 电视端精细小图标：去掉其自身的点击，它仅作为视觉提示存在，通过上面整行的长按操作触发 */}
+      <View style={styles.moreButton}>
+        <Icon 
+          name="dots-vertical" 
+          style={{ color: isTvFocused ? (theme['c-primary'] || '#ff7c00') : theme['c-350'] }} 
+          size={14} 
+        />
+      </View>
     </View>
   )
 }, (prevProps, nextProps) => {
@@ -92,13 +146,10 @@ export default memo(({ item, index, showSource, onPress, onLongPress, onShowMenu
 
 const styles = createStyle({
   listItem: {
-    // width: '100%',
     flexDirection: 'row',
     flexWrap: 'nowrap',
-    // paddingLeft: 10,
     paddingRight: 2,
     alignItems: 'center',
-    // borderBottomWidth: BorderWidths.normal,
   },
   listItemLeft: {
     flex: 1,
@@ -106,12 +157,11 @@ const styles = createStyle({
     flexShrink: 1,
     flexDirection: 'row',
     alignItems: 'center',
+    height: '100%',
   },
   sn: {
     width: 38,
-    // fontSize: 12,
     textAlign: 'center',
-    // backgroundColor: 'rgba(0,0,0,0.2)',
     paddingLeft: 3,
     paddingRight: 3,
   },
@@ -119,53 +169,21 @@ const styles = createStyle({
     flexGrow: 1,
     flexShrink: 1,
     paddingRight: 2,
-    // paddingTop: 10,
-    // paddingBottom: 10,
   },
-  // listItemTitle: {
-  //   // backgroundColor: 'rgba(0,0,0,0.2)',
-  //   flexGrow: 0,
-  //   flexShrink: 1,
-  //   // fontSize: 15,
-  // },
   listItemSingle: {
     paddingTop: 2,
     flexDirection: 'row',
     alignItems: 'center',
-    // alignItems: 'flex-end',
-    // backgroundColor: 'rgba(0,0,0,0.2)',
-  },
-  listItemTimeLabel: {
-    marginRight: 5,
-    fontWeight: '400',
   },
   listItemSingleText: {
-    // fontSize: 13,
-    // paddingTop: 2,
     flexGrow: 0,
     flexShrink: 1,
     fontWeight: '300',
   },
-  listItemBadge: {
-    // fontSize: 10,
-    paddingLeft: 5,
-    paddingTop: 2,
-    alignSelf: 'flex-start',
-  },
-  listItemRight: {
-    flexGrow: 0,
-    flexShrink: 0,
-    flexBasis: 'auto',
-    justifyContent: 'center',
-  },
   moreButton: {
-    height: '80%',
+    height: '100%',
     paddingLeft: 16,
     paddingRight: 16,
-    // paddingTop: 10,
-    // paddingBottom: 10,
-    // backgroundColor: 'rgba(0,0,0,0.2)',
     justifyContent: 'center',
   },
 })
-
