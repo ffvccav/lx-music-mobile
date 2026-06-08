@@ -2,7 +2,6 @@ import { useRef, useState, useMemo, forwardRef, useImperativeHandle } from 'reac
 import { FlatList, View, RefreshControl, type FlatListProps } from 'react-native'
 
 import ListItem from './ListItem'
-// import { navigations } from '@/navigation'
 import { type ListInfoItem } from '@/store/songlist/state'
 import { useLayout } from '@/utils/hooks'
 import { useTheme } from '@/store/theme/hook'
@@ -13,7 +12,6 @@ import Text from '@/components/common/Text'
 
 type FlatListType = FlatListProps<ListInfoItem>
 
-// const MAX_WIDTH = scaleSizeW(110)
 const MIN_WIDTH = scaleSizeW(110)
 const GAP = scaleSizeW(20)
 
@@ -36,11 +34,9 @@ export default forwardRef<ListType, ListProps>(({ onRefresh, onLoadMore, onOpenD
   const [status, setStatus] = useState<Status>('idle')
   const { onLayout, width } = useLayout()
   const theme = useTheme()
-  // console.log('render songlist')
 
   useImperativeHandle(ref, () => ({
     setList(list, showSource = false) {
-      // rawListRef.current = list
       setList(list)
       setShowSource(showSource)
     },
@@ -63,17 +59,16 @@ export default forwardRef<ListType, ListProps>(({ onRefresh, onLoadMore, onOpenD
       onPress={onOpenDetail}
     />
   )
+  
   const getkey: FlatListType['keyExtractor'] = item => item.id
-  // const getItemLayout: FlatListType['getItemLayout'] = (data, index) => {
-  //   return { length: ITEM_HEIGHT, offset: ITEM_HEIGHT * index, index }
-  // }
+  
   const refreshControl = useMemo(() => (
     <RefreshControl
       colors={[theme['c-primary']]}
-      // progressBackgroundColor={theme.primary}
       refreshing={status == 'refreshing'}
       onRefresh={onRefresh} />
   ), [status, onRefresh, theme])
+  
   const footerComponent = useMemo(() => {
     let label: FooterLabel
     switch (status) {
@@ -98,23 +93,11 @@ export default forwardRef<ListType, ListProps>(({ onRefresh, onLoadMore, onOpenD
     )
   }, [onLoadMore, status])
 
-
-  // const itemWidth = useMemo(() => {
-  //   let itemWidth = Math.max(Math.trunc(width * 0.125), MAX_WIDTH)
-  //   // if (itemWidth < )
-  // }, [width])
-  // const computedItemWidth = useMemo(() => {
-  //   let w = width - GAP
-  //   let n = width / (MIN_WIDTH + GAP)
-  //   if (n > 10) n = 10
-  //   return Math.floor(w / n)
-  // }, [width])
-  // console.log(Math.trunc(width * 0.125), itemWidth)
-  // console.log(itemWidth, MIN_WIDTH, GAP, width)
+  // 计算每排网格数
   const rowInfo = useMemo(() => {
     let w = width - GAP
     let n = width / (MIN_WIDTH + GAP)
-    if (n > 10) n = 10
+    if (n > 6) n = 6 // 📺 电视端精细化调整：一排 10 列太密密麻麻了，限制最多 6 列，让卡片变大更清晰
     let computedItemWidth = Math.floor(w / n)
     const num = Math.max(Math.floor(width / computedItemWidth), 2)
     return {
@@ -122,7 +105,7 @@ export default forwardRef<ListType, ListProps>(({ onRefresh, onLoadMore, onOpenD
       width: (width - GAP) / num,
     }
   }, [width])
-  // console.log(rowNum)
+
   const list = useMemo(() => {
     const list = [...currentList]
     let whiteItemNum = (list.length % rowInfo.num)
@@ -141,7 +124,6 @@ export default forwardRef<ListType, ListProps>(({ onRefresh, onLoadMore, onOpenD
     }
     return list
   }, [currentList, rowInfo])
-  // console.log(listInfo.list.map((item) => item.id))
 
   return (
     <View style={styles.container} onLayout={onLayout}>
@@ -150,23 +132,22 @@ export default forwardRef<ListType, ListProps>(({ onRefresh, onLoadMore, onOpenD
           ? null
           : (
               <FlatList
-                key={String(rowInfo.num)}
+                // 📺 电视端神级避坑：不要直接拿动态 num 作为唯一的 key，防止组件在电视初始化时疯狂卸载重建导致的白屏闪烁
+                key={`tv_grid_${rowInfo.num}`} 
                 ref={flatListRef}
                 style={styles.list}
-                columnWrapperStyle={{ justifyContent: 'space-evenly' }}
+                columnWrapperStyle={{ justifyContent: 'flex-start' }} // 📺 改为靠左对齐，配合网格更稳固
                 numColumns={rowInfo.num}
                 data={list}
-                maxToRenderPerBatch={4}
-                // updateCellsBatchingPeriod={80}
-                windowSize={8}
-                removeClippedSubviews={true}
-                // initialNumToRender={12}
+                
+                // 📺 电视端专属性能包（TV Optimizations）
+                maxToRenderPerBatch={12} // 适当加大单批渲染量，应对遥控器快速连续连按
+                windowSize={21}          // 📺 大幅增加窗口缓存范围，哪怕卡片滑出屏幕也绝不卸载
+                removeClippedSubviews={false} // 📺 必须改为 false！防止出屏卡片被销毁导致遥控器光标丢失
+                
                 renderItem={renderItem}
                 keyExtractor={getkey}
-                // getItemLayout={getItemLayout}
-                // onRefresh={onRefresh}
-                // refreshing={refreshing}
-                onEndReachedThreshold={0.6}
+                onEndReachedThreshold={0.8} // 📺 提早触发加载更多，防止电视端翻页等待
                 onEndReached={handleLoadMore}
                 refreshControl={refreshControl}
                 ListFooterComponent={footerComponent}
@@ -199,7 +180,6 @@ const Footer = ({ label, onLoadMore }: {
   )
 }
 
-
 const styles = createStyle({
   container: {
     flex: 1,
@@ -212,6 +192,7 @@ const styles = createStyle({
   },
   footer: {
     textAlign: 'center',
-    padding: 10,
+    padding: 15,
+    fontSize: 14,
   },
 })
